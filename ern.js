@@ -15,10 +15,30 @@
     
     const fs = require('fs');
     const TVDB = require('node-tvdb');
+    //API documentation: https://edwellbrook.github.io/node-tvdb/Client.html#getSeriesById
     const tvdb = new TVDB('4296B7GBEUY13UII');
     
     var dir = "/mnt/stronghold/data/video/Animation/Series/Invader\ Zim";
     var searchTerm = "Invader ZIM";
+    
+    var tools = (function (){
+        function pad(n, width, z) {
+            z = z || '0';
+            n = n + '';
+            return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
+        };
+        
+        function standardSequenceID (seasonNumber, episodeNumber){
+            var amount = 2;
+            return `S${pad(seasonNumber, amount)}E${pad(episodeNumber, amount)}`;
+        };
+        
+        return {
+            pad: pad,
+            standardSequenceID: standardSequenceID
+        };
+        
+    }());
     
     function getListOfFiles(dir, callback){
         log.log(dir);
@@ -62,6 +82,7 @@
                         firstAired: response[i].firstAired
                     });
                 }
+                log.log(metaData);
                 callback(metaData);
             })
             .catch(error => { log.error(error);  });
@@ -72,7 +93,10 @@
             .then(response => { 
                 callback(response);
             })
-            .catch(error => { log.error(error);  });
+            .catch(error => { 
+                log.error(error);  
+                callback({episodes: []});
+            });
         };
             
         function main(searchTerm, callback){
@@ -80,7 +104,8 @@
             
             function processSearchResults(results, callback){
                 var result = results.shift();
-                if(result){
+                log.log(result);
+                if(result && result.id){
                     result.episodes = [];
                     getSeriesById(result.id, function(response){
                         var episode = response.episodes.shift();
@@ -89,7 +114,8 @@
                                 id: episode.id,
                                 airedSeason: episode.airedSeason,
                                 airedEpisodeNumber: episode.airedEpisodeNumber,
-                                episodeName: episode.episodeName
+                                episodeName: episode.episodeName,
+                                standardSequenceID: tools.standardSequenceID(episode.airedSeason, episode.airedEpisodeNumber)
                             });
                             
                             episode = response.episodes.shift();
@@ -116,13 +142,14 @@
     };
     
     
-    /*
+    //*
     getMetaData(searchTerm, function(metaData){
         log.log(JSON.stringify(metaData));
     });//*/
     
+    /*
     getListOfFiles(dir, function(result){
         log.log(result);
-    });
+    });//*/
     
 })();
