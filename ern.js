@@ -185,6 +185,14 @@
                     rating = processRating(series.episodes[i], rating);
                 }
                 
+                if(rating.matchCollisions.length){
+                    log.error('Collisions!');
+                    rating.matchRating = (rating.matchRating / rating.matchCollisions.length);
+                    log.log(rating);                    
+                    rating.collisions = true;
+                }else{
+                    rating.collisions = false;
+                }
                 
                     //log.log(rating);
                 return rating;
@@ -193,17 +201,22 @@
                 //console.log(series);
                 var ratings = [];
                 var rating;
-                for(var i = 0, l = files.length; i < l; i++){
+                var ratingScore = 0;
+                var i = 0, l = files.length;
+                for(; i < l; i++){
                     rating = rate.episode(files[i], series);
+                    ratingScore += rating.matchRating;
                     ratings.push(rating);
-                    if(rating.matchCollisions.length){
-                        log.error('Collisions!');
-                        log.log(rating);
-                    }
                 }
                 
-                return ratings;
+                ratingScore = (ratingScore / l);
+                
+                return {
+                    seriesMatchRating: ratingScore,
+                    matches: ratings
+                };
             }
+            
         };
         
         
