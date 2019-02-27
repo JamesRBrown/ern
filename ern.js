@@ -65,29 +65,87 @@
         
     }());
     
-    function getListOfFiles(dir, callback){
-        log.log(dir);
-        var listOfFiles = [];
-        
-        function filterDirectories(files){
-            var file = files.shift();
-            while(file){
-                
-                if(!fs.lstatSync(`${dir}/${file}`).isDirectory()){
-                    listOfFiles.push(file);
-                }
-                
-                file = files.shift();
-            }
-            callback(listOfFiles);
-        };
     
-        fs.readdir(dir, (err, files) => {
-            if(err) log.error(err);
-            filterDirectories(files);
-        });
+    var file = (function(){
+        var get = {
+            listOfFiles: function (dir, callback){
+                log.log(dir);
+                var listOfFiles = [];
+
+                function filterDirectories(files){
+                    var file = files.shift();
+                    while(file){
+
+                        if(!fs.lstatSync(`${dir}/${file}`).isDirectory()){
+                            listOfFiles.push(file);
+                        }
+
+                        file = files.shift();
+                    }
+                    callback(listOfFiles);
+                };
+
+                fs.readdir(dir, (err, files) => {
+                    if(err) log.error(err);
+                    filterDirectories(files);
+                });
+
+            }
+        };
         
-    };
+        var write = {
+            filenames: function  (dir, mappedSeries, callback){
+                if(mappedSeries.seriesMatchRating === 1){
+                    var i = 0, l = mappedSeries.matches.length;
+                    var work = [];
+                    for(; i < l; i++){
+                        var oldfilename = `${dir}/${mappedSeries.matches[i].filename}`;
+                        var newfilename = `${dir}/${mappedSeries.matches[i].newFilename}`;
+                        //log.log(`oldfilename: ${oldfilename}`);
+                        //log.log(`newfilename: ${newfilename}`);
+                        work.push({
+                            oldfilename: oldfilename,
+                            newfilename: newfilename
+                        });
+                    }
+                    function processWork(work, callback){
+                        if(work.length){
+                            var item = work.shift();
+                            fs.rename(item.oldfilename, item.newfilename, function(err) {
+                                if ( err ) log.error('ERROR: ' + err);
+                                processWork(work, callback);
+                            });
+                        }else{
+                            callback();
+                        }
+                    };
+                    processWork(work, function(){
+                        mappedSeries.namesChanged = true;
+                        callback(mappedSeries);
+                    });
+                }else{
+                    mappedSeries.namesChanged = false;
+                        callback(mappedSeries);
+                }
+            },
+            state: function(dir, mappedSeries, callback){
+                fs.writeFile(`${dir}/ern - ${new Date()}.json`, JSON.stringify(mappedSeries), function(err) {
+                    if(err) {
+                        return log.error(err);
+                    }
+
+                    log.log("The file was saved!");
+                    callback(mappedSeries);
+                }); 
+            }
+        };
+        
+        return {
+            get:get,
+            write:write
+        };
+    })();
+    
     
     var api = (function(){
         const TVDB = require('node-tvdb');
@@ -220,11 +278,43 @@
         };
         
         
+        
         return {
             episode: rate.episode,            
             series: rate.series            
         };
     })();
+    
+    var rename = (function(){
+        //if(mappedSeries.seriesMatchRating === 1){}
+        var generate = {
+            prependSequence: function(mappedSeries){
+                
+                log.log('Series matches...');
+                var i = 0, l = mappedSeries.matches.length;
+                log.log(l);
+                var newFilename = '';
+                for(; i < l; i++){
+                    //log.log(JSON.stringify(mappedSeries.matches[i]));
+                    newFilename = `${mappedSeries.matches[i].highestRatedMatch.standardSequenceID} - ${mappedSeries.matches[i].filename}`;
+                    //console.log(newFilename);
+                    mappedSeries.matches[i].newFilename = newFilename;
+                    //log.log(JSON.stringify(mappedSeries.matches[i].highestRatedMatch));
+                }
+                
+                return mappedSeries;
+            }
+        };
+        
+        
+        
+        return {
+            generate: {
+                prependSequence: generate.prependSequence
+            }
+        };
+    })();
+    
     
     //search: 'Invader ZIM'
     
@@ -237,9 +327,15 @@
     //*
     api.get.episodesByID(75545, function(series){
         //console.log(series);
-        getListOfFiles(dir, function(files){
+        file.get.listOfFiles(dir, function(files){
             log.log(files);
-            console.log(mapper.series(files, series));
+            //console.log(mapper.series(files, series));
+            //console.log(rename.generate.prependSequence(mapper.series(files, series)));
+            file.write.filenames(dir, rename.generate.prependSequence(mapper.series(files, series)),function(series){
+                file.write.state(dir, series, function(){
+                    log.log('done');
+                });
+            });
         });
     });//*/
     
