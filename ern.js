@@ -52,10 +52,15 @@
             return matched;
         };
         
+        function simpleClone(o){
+            return JSON.parse(JSON.stringify(o));
+        }
+        
         return {
             pad: pad,
             standardSequenceID: standardSequenceID,
-            matchRating: matchRating
+            matchRating: matchRating,
+            simpleClone: simpleClone
         };
         
     }());
@@ -130,81 +135,6 @@
             }
         };
         
-        function getMetaData(searchTerm, callback){
-            log.log(searchTerm);
-            function searchForSeries(searchTerm, callback){
-                log.log(searchTerm);
-                var metaData = [];
-                tvdb.getSeriesByName(searchTerm)
-                .then(response => { 
-                    //log.log(response);
-                    for(var i = 0, l = response.length; i < l; i++){
-                        metaData.push({
-                            seriesName: response[i].seriesName,
-                            id: response[i].id,
-                            slug: response[i].slug,
-                            firstAired: response[i].firstAired
-                        });
-                    }
-                    log.log(metaData);
-                    callback(metaData);
-                })
-                .catch(error => { log.error(error);  });
-            };
-
-            function getSeriesById(id, callback){
-                
-                tvdb.getSeriesAllById(id)
-                .then(response => { 
-                    callback(response);
-                })
-                .catch(error => { 
-                    log.error(error);  
-                    callback({episodes: []});
-                });
-            };
-
-            function main(searchTerm, callback){
-                var metaData = [];
-
-                function processSearchResults(results, callback){
-                    var result = results.shift();
-                    log.log(result);
-                    if(result && result.id){
-                        result.episodes = [];
-                        getSeriesById(result.id, function(response){
-                            var episode = response.episodes.shift();
-                            while(episode){
-                                result.episodes.push({
-                                    id: episode.id,
-                                    airedSeason: episode.airedSeason,
-                                    airedEpisodeNumber: episode.airedEpisodeNumber,
-                                    episodeName: episode.episodeName,
-                                    standardSequenceID: tools.standardSequenceID(episode.airedSeason, episode.airedEpisodeNumber)
-                                });
-
-                                episode = response.episodes.shift();
-                            }
-                            metaData.push(result);
-                            processSearchResults(results, callback);
-                        });
-                    }else{
-                        callback();
-                    }
-                };
-
-                searchForSeries(searchTerm, function(results){
-                    //log.log(results);
-                    processSearchResults(results, function(){
-                        callback(metaData);
-                    });
-                });
-            }
-
-            main(searchTerm, function(metaData){
-                callback(metaData);
-            });
-        };
         
         return {
             get:{
@@ -226,33 +156,60 @@
                     matchCollisions: []
                 };
                 
-                function processRating(episode){
-                    var rating = tools.matchRating(filename, episode.episodeName);
-                    if(rating.matchRating < rating){
-                        rating.matchRating = rating;                        
+                function processRating(episode, rating){
+                    
+                    //log.log(filename);
+                    //log.log(episode);
+                    var episodeRating = 0;
+                    //log.log(episodeRating);
+                    episodeRating = tools.matchRating(filename, episode.episodeName);
+                    //log.log(episodeRating);
+                    if(rating.matchRating < episodeRating){
+                        //log.log('greater rating');
+                        rating.matchRating = episodeRating;                        
                         rating.highestRatedMatch = episode;                        
                         rating.matchCollisions = []; //reset collision tracking
-                    }else if(rating.matchRating === rating){
+                    }else if(rating.matchRating === episodeRating){
+                        //log.log('collision');
                         rating.matchCollisions.push(episode);
+                    }else if(rating.matchRating > episodeRating){
+                        //log.log('lower rating');
+                    }else{
+                        log.error('bad state!');
                     }
+                    //log.log(rating);
+                    return rating;
                 };
                 
-                var episodes = series.episodes;
-                var episode = episodes.shift();
-                while(episode){
-                    processRating(episode);
-                    episode = episodes.shift();
+                for(var i = 0, l = series.episodes.length; i < l ; i++){
+                    rating = processRating(series.episodes[i], rating);
                 }
+                
+                
+                    //log.log(rating);
                 return rating;
             },
-            series: function(){
+            series: function(files, series){
+                //console.log(series);
+                var ratings = [];
+                var rating;
+                for(var i = 0, l = files.length; i < l; i++){
+                    rating = rate.episode(files[i], series);
+                    ratings.push(rating);
+                    if(rating.matchCollisions.length){
+                        log.error('Collisions!');
+                        log.log(rating);
+                    }
+                }
                 
+                return ratings;
             }
         };
         
         
         return {
-            
+            episode: rate.episode,            
+            series: rate.series            
         };
     })();
     
@@ -264,10 +221,21 @@
     getMetaData(searchTerm, function(metaData){
         log.log(JSON.stringify(metaData));
     });//*/
+    //*
+    api.get.episodesByID(75545, function(series){
+        //console.log(series);
+        getListOfFiles(dir, function(files){
+            log.log(files);
+            console.log(mapper.series(files, series));
+        });
+    });//*/
     
-    api.get.episodesByID(75545, function(response){
-        console.log(response);
-    });
+    
+    /*
+    api.get.episodesByID(75545, function(series){
+        var filename = 'Invader Zim S01E10 Career Day.mp4';
+        console.log(mapper.episode(filename, series));
+    });//*/
     
     /*
     getListOfFiles(dir, function(result){
