@@ -90,19 +90,43 @@
         const tvdb = new TVDB('4296B7GBEUY13UII');
         
         var get = {
-            seriesByID : function(id, callback){
-                function processReturn(response){
+            raw:{
+                seriesByID : function(id, callback){
+                    tvdb.getSeriesAllById(id)
+                    .then(response => { 
+                        callback(response);
+                    })
+                    .catch(error => { 
+                        log.error(error);  
+                        callback({episodes: []});
+                    });
+                }
+            },
+            filtered:{
+                episodesByID : function(id, callback){        
+                    var series = {
+                        episodes: []
+                    };
 
-                };
+                    get.raw.seriesByID(id, function(response){
+                        series.seriesName = response.seriesName;
+                        series.firstAired = response.firstAired;
+                        var episode = response.episodes.shift();
+                        while(episode){
+                            series.episodes.push({
+                                id: episode.id,
+                                airedSeason: episode.airedSeason,
+                                airedEpisodeNumber: episode.airedEpisodeNumber,
+                                episodeName: episode.episodeName,
+                                standardSequenceID: tools.standardSequenceID(episode.airedSeason, episode.airedEpisodeNumber)
+                            });
 
-                tvdb.getSeriesAllById(id)
-                .then(response => { 
-                    callback(response);
-                })
-                .catch(error => { 
-                    log.error(error);  
-                    callback({episodes: []});
-                });
+                            episode = response.episodes.shift();
+                        }
+                        
+                        callback(series);
+                    });
+                }
             }
         };
         
@@ -129,9 +153,6 @@
             };
 
             function getSeriesById(id, callback){
-                function processReturn(response){
-                    
-                };
                 
                 tvdb.getSeriesAllById(id)
                 .then(response => { 
@@ -187,10 +208,52 @@
         
         return {
             get:{
-                seriesByID: get.seriesByID
+                seriesByID: get.raw.seriesByID,
+                episodesByID: get.filtered.episodesByID
             }
         };
         
+    })();
+    
+    var mapper = (function(){
+        
+        var rate = {
+            episode: function(filename, series){
+                var rating = {
+                    filename: filename,
+                    matchRating: 0,
+                    highestRatedMatch: {},
+                    matchCollisions: []
+                };
+                
+                function processRating(episode){
+                    var rating = tools.matchRating(filename, episode.episodeName);
+                    if(rating.matchRating < rating){
+                        rating.matchRating = rating;                        
+                        rating.highestRatedMatch = episode;                        
+                        rating.matchCollisions = []; //reset collision tracking
+                    }else if(rating.matchRating === rating){
+                        rating.matchCollisions.push(episode);
+                    }
+                };
+                
+                var episodes = series.episodes;
+                var episode = episodes.shift();
+                while(episode){
+                    processRating(episode);
+                    episode = episodes.shift();
+                }
+                return rating;
+            },
+            series: function(){
+                
+            }
+        };
+        
+        
+        return {
+            
+        };
     })();
     
     //search: 'Invader ZIM'
@@ -202,7 +265,7 @@
         log.log(JSON.stringify(metaData));
     });//*/
     
-    api.get.seriesByID(75545, function(response){
+    api.get.episodesByID(75545, function(response){
         console.log(response);
     });
     
@@ -211,14 +274,6 @@
         log.log(result);
     });//*/
     
-    function mapper(fileNames, metaData){
-        var IDs = [];
-        var files = {};
-        
-        
-        
-        
-       
-    };
+    
     
 })();
